@@ -18,6 +18,7 @@ import json
 import logging
 import os
 
+from google.api_core.exceptions import Forbidden
 from google.cloud import bigquery
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,20 @@ logger = logging.getLogger(__name__)
 # roughly 2x headroom for normal use. Raise it if you widen the lookback.
 _MAX_BYTES_BILLED = 8 * 1024**3  # 8 GiB
 _QUERY_TIMEOUT_SECONDS = 60.0
+
+_GENERIC_ERROR = (
+    "Error executing BigQuery query. The query may be invalid or may "
+    "exceed the configured scan limit; see the service logs for "
+    "details."
+)
+# One-click deploys run as a platform identity (e.g. the Agent Runtime
+# service agent) that has no BigQuery permissions until someone grants them.
+# Say so plainly: the person who clicked Deploy rarely reads service logs.
+_PERMISSION_HINT = (
+    "BigQuery refused the query: this agent's runtime identity is not "
+    "allowed to run BigQuery jobs. Grant it roles/bigquery.user on the "
+    "project (see the Permissions section of the recipe README)."
+)
 
 
 def clean_sql_query(text: str) -> str:
@@ -75,13 +90,17 @@ def execute_bigquery_sql(sql: str) -> str:
             .replace("```sql", "")
             .replace("```", "")
         )
+    except Forbidden as e:
+        # 403 also covers non-IAM refusals (e.g. quota); only an IAM denial
+        # gets the permission hint.
+        if any(err.get("reason") == "accessDenied" for err in e.errors or []):
+            logger.exception("BigQuery permission denied")
+            return _PERMISSION_HINT
+        logger.exception("BigQuery query failed")
+        return _GENERIC_ERROR
     except Exception:
         # Log the detail for the operator; return a generic message so raw
         # backend errors (which can name projects, datasets and tables) are
         # not handed back to the model or the end user.
         logger.exception("BigQuery query failed")
-        return (
-            "Error executing BigQuery query. The query may be invalid or may "
-            "exceed the configured scan limit; see the service logs for "
-            "details."
-        )
+        return _GENERIC_ERROR

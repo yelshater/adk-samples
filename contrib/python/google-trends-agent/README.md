@@ -72,20 +72,9 @@ This agent is a sequential agent composed of two sub-agents that work together t
       GOOGLE_CLOUD_STORAGE_BUCKET="<your-storage-bucket>" # Required for deployment
       ```
 
-    - Grant the Agent Engine service account permission to run BigQuery jobs. This is required for deployment.
-
-      ```bash
-      # Set your project ID
-      export PROJECT_ID="<your-project-id>"
-
-      # Get your project number
-      export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
-
-      # Grant the Agent Engine service account permission to run BigQuery jobs
-      gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-          --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-aiplatform-re.iam.gserviceaccount.com" \
-          --role="roles/bigquery.user"
-      ```
+    - Before deploying, grant the deployed agent permission to run BigQuery
+      jobs; see [Permissions](#permissions). Running locally uses your own
+      gcloud credentials instead.
 
 ## Running the Agent Locally
 
@@ -107,6 +96,38 @@ You can run the agent locally using the `adk` command in your terminal.
     adk web
     ```
     Then select `app` from the dropdown menu.
+
+## Permissions
+
+A deployed agent runs as a platform identity, not as you. That identity needs
+`roles/bigquery.user` on your project to run query jobs. The Google Trends
+dataset is public, so no dataset-level role is needed.
+
+| Where it runs | Runtime identity |
+|---|---|
+| Agent Runtime / Agent Engine (`deployment/deploy.py`, `agents-cli deploy -d agent_runtime`, Agent Garden) | `service-<PROJECT_NUMBER>@gcp-sa-aiplatform-re.iam.gserviceaccount.com` |
+| Cloud Run (`agents-cli deploy`) | the service's runtime service account (default: the Compute Engine default service account) |
+
+For Agent Runtime:
+
+```bash
+export PROJECT_ID=$(gcloud config get-value project)
+export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+
+# Make sure the Agent Runtime service agent exists (no-op if it already does).
+gcloud beta services identity create --service=aiplatform.googleapis.com --project=$PROJECT_ID
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-aiplatform-re.iam.gserviceaccount.com" \
+    --role="roles/bigquery.user"
+```
+
+For Cloud Run, grant the same role (plus `roles/aiplatform.user`) to the
+service's runtime service account.
+
+If the grant is missing, the agent replies *"BigQuery refused the query: this
+agent's runtime identity is not allowed to run BigQuery jobs"*. Run the grant
+above and ask again; IAM changes can take a minute to apply.
 
 ## Deploying the Agent Remotely
 
@@ -131,6 +152,46 @@ The agent can also be deployed to [Vertex AI Agent Engine](https://cloud.google.
     python deployment/test_deployment.py
     ```
     You can type `quit` at any point to exit.
+
+### As a Container (Cloud Run)
+
+The recipe ships a `Dockerfile` that serves the agent with FastAPI on port
+8080 (`app/fast_api_app.py`), exposing the ADK API and an A2A endpoint.
+Model names default to the values in `.env.example`, which is copied into the
+image; override any of them with environment variables.
+
+1.  **Build and run locally** (uses your Application Default Credentials):
+    ```bash
+    docker build -t google-trends-agent .
+    docker run --rm -p 8080:8080 \
+        -e GOOGLE_CLOUD_PROJECT=<your-project-id> \
+        -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/adc.json \
+        -v ~/.config/gcloud/application_default_credentials.json:/tmp/adc.json:ro \
+        google-trends-agent
+    curl localhost:8080/list-apps
+    ```
+
+2.  **Deploy to Cloud Run** with `agents-cli` (the `google-agents-cli`
+    package), which reads
+    `agents-cli-manifest.yaml` (target `cloud_run`, region `us-central1`) and
+    runs `gcloud run deploy --source .` for you. From the recipe root:
+    ```bash
+    agents-cli deploy --project <your-project-id> --dry-run  # preview
+    agents-cli deploy --project <your-project-id>
+    ```
+    The service is private (`--no-allow-unauthenticated`). Grant its runtime
+    service account the roles in [Permissions](#permissions).
+
+    > **Note:** `agents-cli deploy` forwards every variable in your local
+    > `.env` to the service. Check the `--dry-run` output, or deploy from a
+    > clean checkout, if your `.env` points at a different project.
+
+3.  **Talk to the deployed agent:**
+    ```bash
+    agents-cli run --url <service-url> --mode a2a "What's trending in Canada this week?"
+    ```
+    or call the ADK API directly with
+    `-H "Authorization: Bearer $(gcloud auth print-identity-token)"`.
 
 ### Example Interaction
 

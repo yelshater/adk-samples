@@ -17,6 +17,7 @@
 import os
 
 from google.adk.agents import LlmAgent, SequentialAgent
+from google.adk.apps import App
 
 from app.prompt import load_agent_instructions
 from app.tools import execute_bigquery_sql
@@ -66,3 +67,5 @@ root_agent = SequentialAgent(
     description="""A two-step pipeline that first generates a SQL query for Google Trends and then executes it.
     Format the output as user friendly markdown format. Separate the SQL query and the interpretation of the results with a horizontal line.""",
 )
+
+app = App(root_agent=root_agent, name="app")

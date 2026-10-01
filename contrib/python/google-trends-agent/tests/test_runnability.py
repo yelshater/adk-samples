@@ -23,8 +23,8 @@ def test_agent_runnability() -> None:
     # credential lookups don't need ADC — the setup must happen before the import.
     # The model names have no fallback in source, so seed them here too.
     os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test-project")
-    os.environ.setdefault("MODEL_NAME_AGENT", "gemini-3.5-flash")
-    os.environ.setdefault("MODEL_NAME_TOOL", "gemini-3.5-flash")
+    os.environ.setdefault("MODEL_NAME_AGENT", "gemini-3.8-flash")
+    os.environ.setdefault("MODEL_NAME_TOOL", "gemini-3.8-flash")
 
     with patch(
         "google.auth.default", return_value=(MagicMock(), "test-project")
@@ -32,3 +32,4 @@ def test_agent_runnability() -> None:
         import app.agent
 
     assert app.agent.root_agent is not None
+    assert app.agent.app is not None

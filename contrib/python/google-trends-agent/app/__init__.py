@@ -23,6 +23,15 @@ from dotenv import load_dotenv
 # already populated by the platform (Cloud Run, Agent Engine, etc.), so a
 # missing .env is expected and not an error.
 load_dotenv()
+# Fall back to the recipe's declared defaults (model names, etc.) so a
+# container built without a .env still starts. Placeholders are dropped so a
+# "<TODO: ...>" value never shadows the platform-provided project.
+load_dotenv(
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env.example")
+)
+for _k, _v in list(os.environ.items()):
+    if _v.startswith(("<TODO", "<YOUR_")):
+        del os.environ[_k]
 
 from . import agent  # noqa: E402 -- must come after load_dotenv()
 
