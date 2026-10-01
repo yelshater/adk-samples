@@ -21,7 +21,9 @@ def _render_template(template_name: str) -> str:
     """Renders a template from the prompt-template directory."""
     current_dir = os.path.dirname(os.path.abspath(__file__))
     template_dir = os.path.join(current_dir, "prompt-template")
-    env = Environment(loader=FileSystemLoader(template_dir))
+    # Templates render plain-text LLM prompts (SQL few-shot examples), not
+    # HTML. Autoescaping would mangle operators and quotes in the SQL.
+    env = Environment(loader=FileSystemLoader(template_dir))  # noqa: S701
     return env.get_template(template_name).render()
 
 

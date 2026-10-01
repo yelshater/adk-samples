@@ -28,7 +28,7 @@ dependencies = [
 dev = [
     "pytest>=8.3.2",
     "pytest-asyncio>=0.23.7",
-    "google-adk[eval]>=2.6.0",
+    "google-adk>=2.6.0",
     "nest-asyncio>=1.6.0",
 ]
 deployment = [

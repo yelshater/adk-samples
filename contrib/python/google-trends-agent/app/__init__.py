@@ -35,7 +35,13 @@ for _k, _v in list(os.environ.items()):
 
 from . import agent  # noqa: E402 -- must come after load_dotenv()
 
-_, project_id = google.auth.default()
+# ADC is optional at import: a container built from this recipe has none in
+# CI, and on Cloud Run / Agent Engine GOOGLE_CLOUD_PROJECT is already set by
+# the platform. Only infer the project when credentials happen to be present.
+try:
+    _, project_id = google.auth.default()
+except google.auth.exceptions.DefaultCredentialsError:
+    project_id = None
 # google.auth.default() returns no project when it cannot infer one (for
 # example ADC with no associated project). Guard it: os.environ.setdefault
 # requires a str and would otherwise raise TypeError at import time.
